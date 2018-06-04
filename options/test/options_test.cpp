@@ -120,6 +120,7 @@ TEST(options, test_that_all_valid_invalid_params)
     }
 }
 
+
 TEST(options, test_that_bootstrap_config_read_from_cmd)
 {
     {
@@ -132,4 +133,13 @@ TEST(options, test_that_bootstrap_config_read_from_cmd)
         ASSERT_EQ(false, options.get_debug_logging());
         ASSERT_EQ(false, options.get_log_to_stdout());
     }
+}
+
+
+TEST(options, test_that_config_file_can_save)
+{
+    bzn::options source; // must load default config file..
+    bzn::options target;
+
+
 }

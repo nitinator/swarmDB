@@ -126,6 +126,8 @@ main(int argc, const char* argv[])
     {
         bzn::options options;
 
+        ///////////////
+
         if (!options.parse_command_line(argc, argv))
         {
             return 0;
@@ -138,6 +140,8 @@ main(int argc, const char* argv[])
 
         set_logging_level(options);
 
+
+        ///////////////////////////////////////////////////////////////////////
         // todo: right now we just want to check that an account "has" a balance...
         double eth_balance = bzn::ethereum().get_ether_balance(options.get_ethererum_address(), options.get_ethererum_io_api_token());
 
@@ -146,6 +150,7 @@ main(int argc, const char* argv[])
             LOG(error) << "No ETH balance found";
             return 0;
         }
+        ///////////////////////////////////////////////////////////////////////
 
         bzn::bootstrap_peers init_peers;
         std::string peers_file = options.get_bootstrap_peers_file();
@@ -172,6 +177,10 @@ main(int argc, const char* argv[])
             LOG(error) << "Failed to find any bootstrap peers";
             return 0;
         }
+        ///////////////////////////////////////////////////////////////////////
+
+
+
 
         auto io_context = std::make_shared<bzn::asio::io_context>();
 
