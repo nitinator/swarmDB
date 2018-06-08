@@ -58,9 +58,9 @@ namespace bzn
         FRIEND_TEST(raft, test_raft_timeout_scale_can_get_set);
         FRIEND_TEST(raft, test_that_raft_can_rehydrate_state_and_log_entries);
         FRIEND_TEST(raft, test_that_raft_can_rehydrate_storage);
-        FRIEND_TEST(raft, test_that_in_a_leader_state_will_send_a_heartbeat_to_its_peers);
-        FRIEND_TEST(raft, test_that_leader_sends_entries_and_commits_when_enough_peers_have_saved_them);
-        FRIEND_TEST(raft, test_that_start_randomly_schedules_callback_for_starting_an_election_and_wins);
+        FRIEND_TEST(raft_test, test_that_in_a_leader_state_will_send_a_heartbeat_to_its_peers);
+        FRIEND_TEST(raft_test, test_that_leader_sends_entries_and_commits_when_enough_peers_have_saved_them);
+        FRIEND_TEST(raft_test, test_that_start_randomly_schedules_callback_for_starting_an_election_and_wins);
         FRIEND_TEST(raft, test_that_raft_bails_on_bad_rehydrate);
         FRIEND_TEST(raft, test_raft_can_find_last_quorum_log_entry);
 
