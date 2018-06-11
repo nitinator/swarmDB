@@ -49,6 +49,7 @@ namespace
         for(auto& entry : entries)
         {
             entry.log_index = index;
+            entry.entry_type = static_cast<bzn::log_entry_type>(index % static_cast<uint8_t>(bzn::log_entry_type::undefined));
             entry.term = std::div(index, 5).quot;
             std::string data(200 * (index%3 +1),'s');
             entry.msg["data"]["value"] = data;
@@ -537,7 +538,7 @@ namespace bzn
 
     TEST(raft, test_log_entry_serialization)
     {
-        const size_t number_of_entries = 300;
+        const size_t number_of_entries = 3;
         const std::string path{"./.state/test_data.dat"};
         boost::filesystem::remove(path);
 
@@ -831,8 +832,13 @@ namespace bzn
         EXPECT_EQ((uint32_t)89, quorum.term);
     }
 
-    TEST_F(raft_test, test_raft_can_)
+    TEST_F(raft_test, test_that_raft_first_log_entry_is_the_quorum)
     {
+        auto raft = bzn::raft(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
+        
+        
+        
+        
 
 
     }
