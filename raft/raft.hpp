@@ -63,6 +63,7 @@ namespace bzn
         FRIEND_TEST(raft_test, test_that_start_randomly_schedules_callback_for_starting_an_election_and_wins);
         FRIEND_TEST(raft, test_that_raft_bails_on_bad_rehydrate);
         FRIEND_TEST(raft, test_raft_can_find_last_quorum_log_entry);
+        FRIEND_TEST(raft_test, test_that_raft_first_log_entry_is_the_quorum);
 
         void start_heartbeat_timer();
         void handle_heartbeat_timeout(const boost::system::error_code& ec);
@@ -98,7 +99,7 @@ namespace bzn
 
         // raft state...
         bzn::raft_state current_state = raft_state::follower;
-        uint32_t        current_term = 1;
+        uint32_t        current_term = 0;
         std::size_t     yes_votes = 0;
         std::size_t     no_votes  = 0;
 #ifndef __APPLE__

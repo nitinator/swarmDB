@@ -47,7 +47,6 @@ namespace bzn
             std::string msg_string;
             obj.log_index = std::numeric_limits<uint32_t>::max();
             obj.term = std::numeric_limits<uint32_t>::max();
-            obj.msg.clear();
 
             auto entry_type = static_cast<uint8_t>(bzn::log_entry_type::undefined);
             in >> entry_type >> obj.log_index >> obj.term >> msg_string;

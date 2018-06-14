@@ -60,12 +60,34 @@ raft::raft(std::shared_ptr<bzn::asio::io_context_base> io_context, std::shared_p
     {
         this->load_state();
         this->load_log_entries();
-
-        const auto& last_entry = this->log_entries.back();
-        if (last_entry.log_index!=this->last_log_index || last_entry.term!=this->current_term)
+    }
+    else
+    {
+        bzn::message root;
+        for(const auto& p : this->peers)
         {
-            throw std::runtime_error(MSG_ERROR_INVALID_LOG_ENTRY_FILE);
+            bzn::message peer;
+            peer["host"] = p.host;
+            peer["port"] = p.port;
+            peer["name"] = p.name;
+            peer["uuid"] = p.uuid;
+            root.append(peer);
         }
+        const bzn::log_entry entry{
+            bzn::log_entry_type::single_quorum,
+            0,
+            0,
+            root};
+
+
+        this->log_entries.emplace_back(entry);
+        this->append_entry_to_log(entry);
+        this->save_state();
+    }
+    const auto& last_entry = this->log_entries.back();
+    if (last_entry.log_index!=this->last_log_index || last_entry.term!=this->current_term)
+    {
+        throw std::runtime_error(MSG_ERROR_INVALID_LOG_ENTRY_FILE);
     }
 }
 
@@ -588,7 +610,7 @@ raft::append_log(const bzn::message& msg)
 
     if (this->current_state != bzn::raft_state::leader)
     {
-        LOG(warning) << "not the leader can't append log_entries!";
+        LOG(warning) << "not the leader, can't append log_entries!";
         return false;
     }
 
@@ -650,23 +672,25 @@ raft::get_leader()
 void
 raft::initialize_storage_from_log(std::shared_ptr<bzn::storage_base> storage)
 {
-
     for (const auto& log_entry : this->log_entries)
     {
-        const auto command = log_entry.msg["cmd"].asString();
-        const auto db_uuid = log_entry.msg["db-uuid"].asString();
-        const auto key = log_entry.msg["data"]["key"].asString();
-        if (command == "create")
+        if(log_entry.entry_type == bzn::log_entry_type::log_entry)
         {
-            storage->create(db_uuid, key, log_entry.msg["data"]["value"].asString());
-        }
-        else if (command == "update")
-        {
-            storage->update(db_uuid, key, log_entry.msg["data"]["value"].asString());
-        }
-        else if (command == "delete")
-        {
-            storage->remove(db_uuid, key);
+            const auto command = log_entry.msg["cmd"].asString();
+            const auto db_uuid = log_entry.msg["db-uuid"].asString();
+            const auto key = log_entry.msg["data"]["key"].asString();
+            if (command == "create")
+            {
+                storage->create(db_uuid, key, log_entry.msg["data"]["value"].asString());
+            }
+            else if (command == "update")
+            {
+                storage->update(db_uuid, key, log_entry.msg["data"]["value"].asString());
+            }
+            else if (command == "delete")
+            {
+                storage->remove(db_uuid, key);
+            }
         }
     }
 }

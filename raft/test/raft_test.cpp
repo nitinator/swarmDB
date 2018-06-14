@@ -41,20 +41,24 @@ namespace
     {
         if(entries.size() != sz)
         {
-            entries.resize(sz);
+            entries.resize(entries.size()+sz);
         }
 
         uint16_t index = 1;
 
-        for(auto& entry : entries)
-        {
-            entry.log_index = index;
-            entry.entry_type = static_cast<bzn::log_entry_type>(index % static_cast<uint8_t>(bzn::log_entry_type::undefined));
-            entry.term = std::div(index, 5).quot;
-            std::string data(200 * (index%3 +1),'s');
-            entry.msg["data"]["value"] = data;
-            index ++;
-        }
+        std::vector<bzn::log_entry>::iterator start = entries.begin() + (entries.front().entry_type == bzn::log_entry_type::single_quorum ? 1 : 0);
+
+        std::for_each(start, entries.end(),
+                      [&](auto& entry)
+                      {
+                          entry.log_index = index;
+                          entry.term = std::div(index, 5).quot;
+
+                          entry.entry_type = bzn::log_entry_type::log_entry;
+                          std::string data(200 * (index%3 +1),'s');
+                          entry.msg["data"]["value"] = data;
+                          index++;
+                      });
     }
 
 
@@ -575,24 +579,27 @@ namespace bzn
         auto mock_session = std::make_shared<bzn::Mocksession_base>();
         auto raft_source = std::make_shared<bzn::raft>(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
 
-        size_t number_of_entries = 300;
+        size_t number_of_entries = 7;
 
         fill_entries_with_test_data(number_of_entries, raft_source->log_entries);
 
         // TODO: this should be done via RAFT, not by cheating. That is, I'd like to simulate the append entry process to ensure that append_entry_to_log gets called
-        for(const auto& log_entry : raft_source->log_entries)
-        {
-            raft_source->append_entry_to_log(log_entry);
-        }
+        std::for_each(raft_source->log_entries.begin(), raft_source->log_entries.end(),
+                      [&](const auto& log_entry)
+                      {
+                          if(log_entry.log_index>0)
+                          {
+                              raft_source->append_entry_to_log(log_entry);
+                          }
+                      });
 
-        raft_source->last_log_index = number_of_entries;
-        raft_source->last_log_term = 60;
-        raft_source->commit_index = number_of_entries - 22;
-        raft_source->current_term = 60;
+        raft_source->last_log_index = raft_source->log_entries.back().log_index;
+        raft_source->last_log_term = raft_source->log_entries.back().term;
+        raft_source->commit_index = raft_source->log_entries.back().log_index;
+        raft_source->current_term = raft_source->last_log_term;
 
         // TODO: This should be done via RAFT, not by cheating.
         raft_source->save_state();
-
 
         // instantiate a raft with the same uuid
         auto raft_target = std::make_shared<bzn::raft>(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
@@ -834,13 +841,23 @@ namespace bzn
 
     TEST_F(raft_test, test_that_raft_first_log_entry_is_the_quorum)
     {
+        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".dat");
+        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".state");
+
+        bzn::message expected;
         auto raft = bzn::raft(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
-        
-        
-        
-        
+        EXPECT_EQ(raft.log_entries.size(), static_cast<size_t>(1));
+        EXPECT_EQ(raft.log_entries.front().entry_type, bzn::log_entry_type::single_quorum);
+        bzn::message msg = raft.log_entries.front().msg;
 
+        for (const auto& p : msg)
+        {
+            bzn::peer_address_t peer_address(p["host"].asString(), (uint16_t)p["port"].asUInt(), p["name"].asString(), p["uuid"].asString());
+            EXPECT_TRUE(TEST_PEER_LIST.find(peer_address) != TEST_PEER_LIST.end());
+        }
 
+        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".dat");
+        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".state");
     }
 
 } // bzn
