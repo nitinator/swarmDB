@@ -48,14 +48,12 @@ namespace
 
         std::vector<bzn::log_entry>::iterator start = entries.begin() + (entries.front().entry_type == bzn::log_entry_type::single_quorum ? 1 : 0);
 
-        std::for_each(start, entries.end(),
+        std::for_each(start, 
+                      entries.end(),
                       [&](auto &entry)
                       {
                           entry.log_index = index;
-                          entry.entry_type = static_cast<bzn::log_entry_type>(index %
-                                                                              static_cast<uint8_t>(bzn::log_entry_type::undefined));
                           entry.term = std::div(index, 5).quot;
-
                           entry.entry_type = bzn::log_entry_type::log_entry;
                           std::string data(200 * (index % 3 + 1), 's');
                           entry.msg["data"]["value"] = data;
@@ -79,11 +77,18 @@ namespace
     void
     clean_state_folder()
     {
-        if(boost::filesystem::exists("./.state"))
+        try 
         {
-            boost::filesystem::remove_all("./.state");
+            if(boost::filesystem::exists("./.state"))
+            {
+                boost::filesystem::remove_all("./.state");
+            }
+            boost::filesystem::create_directory("./.state");
         }
-        boost::filesystem::create_directory("./.state");
+        catch(boost::filesystem::filesystem_error const & e)
+        {
+            LOG(error) << "Error while attempting to clean the state folder:" << e.what();
+        }
     }
 
 
