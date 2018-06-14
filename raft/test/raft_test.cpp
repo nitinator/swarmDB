@@ -48,7 +48,7 @@ namespace
 
         std::vector<bzn::log_entry>::iterator start = entries.begin() + (entries.front().entry_type == bzn::log_entry_type::single_quorum ? 1 : 0);
 
-        std::for_each(start, 
+        std::for_each(start,
                       entries.end(),
                       [&](auto &entry)
                       {
@@ -77,7 +77,7 @@ namespace
     void
     clean_state_folder()
     {
-        try 
+        try
         {
             if(boost::filesystem::exists("./.state"))
             {
