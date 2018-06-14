@@ -41,7 +41,7 @@ namespace
     {
         if(entries.size() != sz)
         {
-            entries.resize(entries.size()+sz);
+            entries.resize(entries.size() + sz);
         }
 
         uint16_t index = 1;
@@ -49,13 +49,15 @@ namespace
         std::vector<bzn::log_entry>::iterator start = entries.begin() + (entries.front().entry_type == bzn::log_entry_type::single_quorum ? 1 : 0);
 
         std::for_each(start, entries.end(),
-                      [&](auto& entry)
+                      [&](auto &entry)
                       {
                           entry.log_index = index;
+                          entry.entry_type = static_cast<bzn::log_entry_type>(index %
+                                                                              static_cast<uint8_t>(bzn::log_entry_type::undefined));
                           entry.term = std::div(index, 5).quot;
 
                           entry.entry_type = bzn::log_entry_type::log_entry;
-                          std::string data(200 * (index%3 +1),'s');
+                          std::string data(200 * (index % 3 + 1), 's');
                           entry.msg["data"]["value"] = data;
                           index++;
                       });
@@ -71,6 +73,17 @@ namespace
             ofs << entry;
         }
         ofs.close();
+    }
+
+
+    void
+    clean_state_folder()
+    {
+        if(boost::filesystem::exists("./.state"))
+        {
+            boost::filesystem::remove_all("./.state");
+        }
+        boost::filesystem::create_directory("./.state");
     }
 
 
@@ -93,11 +106,16 @@ namespace bzn
 
         void SetUp() final
         {
+            clean_state_folder();
             this->mock_io_context = std::make_shared<bzn::asio::Mockio_context_base>();
             this->mock_node = std::make_shared<bzn::Mocknode_base>();
             this->mock_session = std::make_shared<bzn::Mocksession_base>();
         }
 
+        void TearDown() final
+        {
+            clean_state_folder();
+        }
 
         std::shared_ptr<bzn::Mocknode_base> mock_node;
         std::shared_ptr<bzn::asio::Mockio_context_base> mock_io_context;
@@ -106,8 +124,10 @@ namespace bzn
 
     TEST(raft, test_that_default_raft_state_is_follower)
     {
+        clean_state_folder();
         EXPECT_EQ(bzn::raft(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(),
             nullptr, TEST_PEER_LIST, TEST_NODE_UUID).get_state(), bzn::raft_state::follower);
+        clean_state_folder();
     }
 
 
@@ -319,8 +339,6 @@ namespace bzn
 
     TEST_F(raft_test, test_that_leader_sends_entries_and_commits_when_enough_peers_have_saved_them)
     {
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
         auto mock_steady_timer = std::make_unique<NiceMock<bzn::asio::Mocksteady_timer_base>>();
 
         // intercept the timeout callback...
@@ -415,9 +433,6 @@ namespace bzn
         wh(boost::system::error_code());
 
         // todo: verify append entry contents
-
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
     }
 
 
@@ -435,9 +450,6 @@ namespace bzn
             [&]()
             { return std::move(mock_steady_timer); }));
 
-        // create raft...
-        boost::filesystem::remove("./.state/uuid1.dat");
-        boost::filesystem::remove("./.state/uuid1.state");
         auto raft = std::make_shared<bzn::raft>(this->mock_io_context, this->mock_node, TEST_PEER_LIST, "uuid1");
 
         bzn::message_handler mh;
@@ -508,10 +520,6 @@ namespace bzn
         mh(msg, this->mock_session);
         ASSERT_FALSE(resp["data"]["success"].asBool());
         EXPECT_EQ(resp["data"]["matchIndex"].asUInt(), Json::UInt(1));
-
-
-        boost::filesystem::remove("./.state/uuid1.dat");
-        boost::filesystem::remove("./.state/uuid1.state");
     }
 
 
@@ -544,7 +552,7 @@ namespace bzn
     {
         const size_t number_of_entries = 3;
         const std::string path{"./.state/test_data.dat"};
-        boost::filesystem::remove(path);
+        clean_state_folder();
 
         std::vector<bzn::log_entry> entries_source(number_of_entries);
         fill_entries_with_test_data(number_of_entries, entries_source);
@@ -567,27 +575,26 @@ namespace bzn
         EXPECT_EQ(number_of_entries, entries_target.size());
         EXPECT_TRUE(std::equal(entries_source.begin(), entries_source.end(), entries_target.begin(), equality_test));
 
-        boost::filesystem::remove(path);
+        clean_state_folder();
     }
 
 
     TEST(raft, test_that_raft_can_rehydrate_state_and_log_entries)
     {
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
+        clean_state_folder();
 
         auto mock_session = std::make_shared<bzn::Mocksession_base>();
         auto raft_source = std::make_shared<bzn::raft>(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
 
-        size_t number_of_entries = 7;
+        const size_t number_of_entries = 300;
 
         fill_entries_with_test_data(number_of_entries, raft_source->log_entries);
 
         // TODO: this should be done via RAFT, not by cheating. That is, I'd like to simulate the append entry process to ensure that append_entry_to_log gets called
         std::for_each(raft_source->log_entries.begin(), raft_source->log_entries.end(),
-                      [&](const auto& log_entry)
+                      [&](const auto &log_entry)
                       {
-                          if(log_entry.log_index>0)
+                          if (log_entry.log_index > 0)
                           {
                               raft_source->append_entry_to_log(log_entry);
                           }
@@ -609,7 +616,6 @@ namespace bzn
         EXPECT_EQ(raft_target->commit_index, raft_source->commit_index);
         EXPECT_EQ(raft_target->current_term, raft_source->current_term);
 
-
         auto source_entries = raft_source->log_entries;
         auto target_entries = raft_target->log_entries;
 
@@ -628,17 +634,15 @@ namespace bzn
                 }
         ));
 
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
-
+        clean_state_folder();
     }
 
     
     TEST(raft, test_that_raft_can_rehydrate_storage)
     {
         const size_t number_of_entries = 300;
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
+
+        clean_state_folder();
 
         auto mock_session = std::make_shared<bzn::Mocksession_base>();
         auto raft_source = std::make_shared<bzn::raft>(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(),
@@ -739,33 +743,29 @@ namespace bzn
             EXPECT_EQ(rec_1->value, rec_2->value);
         }
 
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove("./.state/" + TEST_NODE_UUID + ".state");
+        clean_state_folder();
     }
 
 
     TEST(raft, test_that_raft_bails_on_bad_rehydrate)
     {
-        std::string good_state{"1 0 1 4"};
-        std::string bad_state{"X 0 X X"};
+        const std::string state_path{"./.state/" + TEST_NODE_UUID + ".state"};
+        const std::string log_path{"./.state/" + TEST_NODE_UUID + ".dat"};
 
-        std::string bad_entry_00{"1 4 THIS_IS_BADeyJiem4tYXB0K"};
-        std::string valid_entry{"1 2 eyJiem4tYXBpIjoiY3J1ZCIsImNtZCI6ImNyZWF0ZSIsImRhdGEiOnsia2V5Ijoia2V5MCIsInZhbHVlIjoidmFsdWVfZm9yX2tleTAifSwiZGItdXVpZCI6Im15LXV1aWQiLCJyZXF1ZXN0LWlkIjowfQo="};
+        const std::string good_state{"1 0 1 4"};
+        const std::string bad_state{"X 0 X X"};
 
-        boost::filesystem::path log_path{"./.state/" + TEST_NODE_UUID + ".dat"};
-        boost::filesystem::path state_path{"./.state/" + TEST_NODE_UUID + ".state"};
+        const std::string bad_entry_00{"1 4 THIS_IS_BADeyJiem4tYXB0K"};
+        const std::string valid_entry{"1 2 eyJiem4tYXBpIjoiY3J1ZCIsImNtZCI6ImNyZWF0ZSIsImRhdGEiOnsia2V5Ijoia2V5MCIsInZhbHVlIjoidmFsdWVfZm9yX2tleTAifSwiZGItdXVpZCI6Im15LXV1aWQiLCJyZXF1ZXN0LWlkIjowfQo="};
 
-        boost::filesystem::create_directory(log_path.parent_path());
-
-        boost::filesystem::remove(log_path);
-        boost::filesystem::remove(state_path);
+        clean_state_folder();
 
         // good state/ empty entry
-        std::ofstream out(state_path.string(), std::ios::out | std::ios::binary);
+        std::ofstream out(state_path, std::ios::out | std::ios::binary);
         out << good_state;
         out.close();
 
-        out.open(log_path.string(), std::ios::out | std::ios::binary);
+        out.open(log_path, std::ios::out | std::ios::binary);
         out << "";
         out.close();
 
@@ -774,7 +774,7 @@ namespace bzn
                         , std::runtime_error);
 
         // good state/bad entry
-        out.open(log_path.string(), std::ios::out | std::ios::binary);
+        out.open(log_path, std::ios::out | std::ios::binary);
         out << bad_entry_00;
         out.close();
 
@@ -783,7 +783,7 @@ namespace bzn
                         , std::runtime_error);
 
         // good state/good entry/mis-matched
-        out.open(log_path.string(), std::ios::out | std::ios::binary);
+        out.open(log_path, std::ios::out | std::ios::binary);
         out << valid_entry;
         out.close();
 
@@ -791,8 +791,7 @@ namespace bzn
                 std::make_shared<bzn::raft>(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID)
                         , std::runtime_error);
 
-        boost::filesystem::remove(log_path);
-        boost::filesystem::remove(state_path);
+        clean_state_folder();
     }
 
 
@@ -841,23 +840,22 @@ namespace bzn
 
     TEST_F(raft_test, test_that_raft_first_log_entry_is_the_quorum)
     {
-        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".state");
+        clean_state_folder();
+
 
         bzn::message expected;
         auto raft = bzn::raft(std::make_shared<NiceMock<bzn::asio::Mockio_context_base>>(), nullptr, TEST_PEER_LIST, TEST_NODE_UUID);
         EXPECT_EQ(raft.log_entries.size(), static_cast<size_t>(1));
         EXPECT_EQ(raft.log_entries.front().entry_type, bzn::log_entry_type::single_quorum);
         bzn::message msg = raft.log_entries.front().msg;
-
+        
         for (const auto& p : msg)
         {
             bzn::peer_address_t peer_address(p["host"].asString(), (uint16_t)p["port"].asUInt(), p["name"].asString(), p["uuid"].asString());
             EXPECT_TRUE(TEST_PEER_LIST.find(peer_address) != TEST_PEER_LIST.end());
         }
 
-        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".dat");
-        boost::filesystem::remove(".state/" + TEST_NODE_UUID + ".state");
+        clean_state_folder();
     }
 
 } // bzn
